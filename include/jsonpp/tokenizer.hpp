@@ -3,7 +3,6 @@
 #include <charconv>
 #include <cmath>
 #include <optional>
-#include <stdexcept>
 #include <string_view>
 
 namespace jsonpp
@@ -21,7 +20,19 @@ enum class TokenType {
     ARRAY_END,    // ]
     COLON,        // :
     COMMA,        // ,
-    END_OF_INPUT
+    END_OF_INPUT,
+    ERROR
+};
+
+enum class ParseError {
+    NONE,
+    UNTERMINATED_STRING,
+    UNTERMINATED_STRING_ESCAPE,
+    INVALID_LITERAL,
+    INVALID_NUMBER_FORMAT,
+    MISSING_FRACTIONAL_DIGITS,
+    MISSING_EXPONENT_DIGITS,
+    UNEXPECTED_CHARACTER
 };
 
 struct Token {
@@ -29,29 +40,18 @@ struct Token {
     std::string_view value; // Points into the original input buffer
     size_t line = 1;
     size_t column = 1;
+    ParseError error = ParseError::NONE;
 
     constexpr Token(TokenType t, std::string_view v = {}, size_t l = 1,
-                    size_t c = 1)
-        : type(t), value(v), line(l), column(c)
+                    size_t c = 1, ParseError e = ParseError::NONE)
+        : type(t), value(v), line(l), column(c), error(e)
     {
     }
+    
+    constexpr bool is_error() const { return type == TokenType::ERROR || error != ParseError::NONE; }
+    constexpr bool is_valid() const { return !is_error(); }
 };
 
-class TokenizerError : public std::runtime_error
-{
-  public:
-    TokenizerError(const std::string &message, size_t line, size_t column)
-        : std::runtime_error(message), line_(line), column_(column)
-    {
-    }
-
-    size_t line() const noexcept { return line_; }
-    size_t column() const noexcept { return column_; }
-
-  private:
-    size_t line_;
-    size_t column_;
-};
 
 class Tokenizer
 {
@@ -117,9 +117,7 @@ class Tokenizer
         case '9':
             return parse_number(token_line, token_column);
         default:
-            throw TokenizerError("Unexpected character: " +
-                                     std::string(1, current),
-                                 line_, column_);
+            return Token{TokenType::ERROR, {}, token_line, token_column, ParseError::UNEXPECTED_CHARACTER};
         }
     }
 
@@ -174,8 +172,7 @@ class Tokenizer
             if (input_[pos_] == '\\') {
                 advance(); // Skip escape character
                 if (pos_ >= input_.size()) {
-                    throw TokenizerError("Unterminated string escape", line_,
-                                         column_);
+                    return Token{TokenType::ERROR, {}, token_line, token_column, ParseError::UNTERMINATED_STRING_ESCAPE};
                 }
                 advance(); // Skip escaped character
             } else {
@@ -184,7 +181,7 @@ class Tokenizer
         }
 
         if (pos_ >= input_.size()) {
-            throw TokenizerError("Unterminated string", line_, column_);
+            return Token{TokenType::ERROR, {}, token_line, token_column, ParseError::UNTERMINATED_STRING};
         }
 
         advance(); // Skip closing quote
@@ -201,7 +198,7 @@ class Tokenizer
 
         for (char expected : literal) {
             if (pos_ >= input_.size() || input_[pos_] != expected) {
-                throw TokenizerError("Invalid literal", line_, column_);
+                return Token{TokenType::ERROR, {}, token_line, token_column, ParseError::INVALID_LITERAL};
             }
             advance();
         }
@@ -221,7 +218,7 @@ class Tokenizer
 
         // Must have at least one digit
         if (pos_ >= input_.size() || !is_digit(input_[pos_])) {
-            throw TokenizerError("Invalid number format", line_, column_);
+            return Token{TokenType::ERROR, {}, token_line, token_column, ParseError::INVALID_NUMBER_FORMAT};
         }
 
         // Handle integer part
@@ -237,9 +234,7 @@ class Tokenizer
         if (pos_ < input_.size() && input_[pos_] == '.') {
             advance();
             if (pos_ >= input_.size() || !is_digit(input_[pos_])) {
-                throw TokenizerError(
-                    "Invalid number format: missing fractional digits", line_,
-                    column_);
+                return Token{TokenType::ERROR, {}, token_line, token_column, ParseError::MISSING_FRACTIONAL_DIGITS};
             }
             while (pos_ < input_.size() && is_digit(input_[pos_])) {
                 advance();
@@ -255,9 +250,7 @@ class Tokenizer
                 advance();
             }
             if (pos_ >= input_.size() || !is_digit(input_[pos_])) {
-                throw TokenizerError(
-                    "Invalid number format: missing exponent digits", line_,
-                    column_);
+                return Token{TokenType::ERROR, {}, token_line, token_column, ParseError::MISSING_EXPONENT_DIGITS};
             }
             while (pos_ < input_.size() && is_digit(input_[pos_])) {
                 advance();
@@ -271,10 +264,10 @@ class Tokenizer
     constexpr bool is_digit(char c) const { return c >= '0' && c <= '9'; }
 };
 
-inline double extract_number(const Token &token)
+inline std::optional<double> extract_number(const Token &token)
 {
     if (token.type != TokenType::NUMBER) {
-        throw std::invalid_argument("Token is not a number");
+        return std::nullopt;
     }
 
     double result = 0.0;
@@ -282,13 +275,13 @@ inline double extract_number(const Token &token)
         token.value.data(), token.value.data() + token.value.size(), result);
 
     if (ec != std::errc{}) {
-        throw std::invalid_argument("Failed to parse number");
+        return std::nullopt;
     }
 
     return result;
 }
 
-constexpr bool extract_boolean(const Token &token)
+constexpr std::optional<bool> extract_boolean(const Token &token)
 {
     switch (token.type) {
     case TokenType::BOOLEAN_TRUE:
@@ -296,14 +289,14 @@ constexpr bool extract_boolean(const Token &token)
     case TokenType::BOOLEAN_FALSE:
         return false;
     default:
-        throw std::invalid_argument("Token is not a boolean");
+        return std::nullopt;
     }
 }
 
-constexpr std::string_view extract_string(const Token &token)
+constexpr std::optional<std::string_view> extract_string(const Token &token)
 {
     if (token.type != TokenType::STRING) {
-        throw std::invalid_argument("Token is not a string");
+        return std::nullopt;
     }
     return token.value;
 }

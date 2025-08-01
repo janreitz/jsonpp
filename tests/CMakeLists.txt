@@ -1,3 +1,5 @@
-# Simple tokenizer test example
-add_executable(tokenizer_test tokenizer_test.cpp)
-target_link_libraries(tokenizer_test PRIVATE jsonpp::jsonpp)
+# Tokenizer test suite - all tests run at compile time via static_assert
+add_executable(test_tokenizer test_tokenizer.cpp)
+target_link_libraries(test_tokenizer PRIVATE jsonpp::jsonpp)
+
+# If this compiles without errors, all tests have passed!
