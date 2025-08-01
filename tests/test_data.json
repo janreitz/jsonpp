@@ -1,0 +1,43 @@
+{
+  "user": {
+    "id": 12345,
+    "name": "Alice Johnson",
+    "email": "alice@example.com",
+    "active": true,
+    "metadata": {
+      "created_at": "2023-01-15T10:30:00Z",
+      "last_login": "2024-07-30T14:22:33Z",
+      "login_count": 847
+    },
+    "tags": ["admin", "power-user", "beta-tester"],
+    "preferences": {
+      "theme": "dark",
+      "notifications": true,
+      "language": "en-US"
+    }
+  },
+  "posts": [
+    {
+      "id": 101,
+      "title": "Getting Started with JSON Parsing",
+      "content": "This is a comprehensive guide to JSON parsing...",
+      "published": true,
+      "views": 1250,
+      "tags": ["tutorial", "json", "programming"]
+    },
+    {
+      "id": 102,
+      "title": "Advanced Parsing Techniques",
+      "content": "In this post we'll explore more advanced concepts...",
+      "published": false,
+      "views": 0,
+      "tags": ["advanced", "parsing", "performance"]
+    }
+  ],
+  "statistics": {
+    "total_users": 50000,
+    "active_users": 12500,
+    "growth_rate": 0.125,
+    "server_uptime": null
+  }
+}
